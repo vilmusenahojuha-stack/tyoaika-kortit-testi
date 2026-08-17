@@ -1116,7 +1116,6 @@ function bindEvents() {
       window.location.href = url;
     };
     $("btnGoFuel")?.addEventListener("click", fuelHandler);
-    $("btnFuel")?.addEventListener("click", fuelHandler);
 
     // Logout
     $("btnLogout")?.addEventListener("click", goLogin);
@@ -1238,6 +1237,11 @@ $("btnAddPlate")?.addEventListener("click", () => {
   $("cardStatus")?.addEventListener("click", () => { window.location.href = HARD_CARDS_URL + "#workToken=" + encodeURIComponent(session.cardToken || ""); });
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshCardStatus(); });
   setInterval(refreshCardStatus, 5 * 60 * 1000);
+
+  $("btnFuel")?.addEventListener("click", async () => {
+    const ok = await confirmModal("Avataanko Tankkaus?", "TANKKAUS");
+    if (ok) window.location.href = HARD_FUEL_URL;
+  });
 
   $("btnCards")?.addEventListener("click", () => {
     window.location.href = HARD_CARDS_URL + "#workToken=" + encodeURIComponent(session.cardToken || "");
