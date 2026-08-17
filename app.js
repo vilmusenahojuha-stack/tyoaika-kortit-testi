@@ -10,13 +10,12 @@
 (() => {
   // ---------- CONFIG ----------
   const USERS = ["Juha", "Matti", "Janne", "Tommi"];
-  const PIN = "1122";
-
   
   // Hardcoded endpoints
   const HARD_SHEETS_URL = "";
   const HARD_FUEL_URL = "https://vilmusenahojuha-stack.github.io/Tankkaus/";
   const HARD_CARDS_URL = "https://vilmusenahojuha-stack.github.io/kortit-perehdytykset/";
+  const HARD_CARDS_API_URL = "https://script.google.com/macros/s/AKfycbws1ods-A_0YnJ04cWHU8D5bTdGVg8Z36qA6lsuyEUHYuDlneG_KkOd32ZP8tK1-4Vc/exec";
 
 const STORAGE = {
     session: "ta_test_session_v1",
@@ -92,7 +91,7 @@ function renderPlates(){
 
   // ---------- STATE ----------
   let cfg = Sget(STORAGE.cfg, DEFAULT_CFG);
-  let session = Sget(STORAGE.session, { user: "", authed: false });
+  let session = Sget(STORAGE.session, { user: "", authed: false, cardToken: "" });
   let running = Sget(STORAGE.running, null);   // current running day
   let history = Sget(STORAGE.history, []);     // approved rows
 
@@ -713,7 +712,7 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
 
   // ---------- AUTH FLOW ----------
   function goLogin() {
-    session = { user: "", authed: false };
+    session = { user: "", authed: false, cardToken: "" };
     persist();
     setSubtitle();
     showView("viewLogin");
@@ -722,6 +721,7 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
   function goPin(user) {
     session.user = user;
     session.authed = false;
+    session.cardToken = "";
     persist();
     $("pinUser").textContent = user;
     $("pinInput").value = "";
@@ -742,6 +742,43 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
 
   await refreshHistoryFromSheets();
 }
+
+  function setCardStatus(kind, title, detail) {
+    const box = $("cardStatus");
+    if (!box) return;
+    box.className = `card-status card-status-${kind}`;
+    $("cardStatusTitle").textContent = title;
+    $("cardStatusDetail").textContent = detail;
+  }
+  function renderCardStatus(s) {
+    const detail = `Voimassa ${s.valid || 0} · Vanhenee pian ${s.warning || 0} · Vanhentunut ${s.expired || 0}`;
+    if ((s.expired || 0) > 0) setCardStatus("expired", `Vanhentuneita: ${s.expired}`, detail);
+    else if ((s.warning || 0) > 0) setCardStatus("warning", `Vanhenee pian: ${s.warning}`, detail);
+    else setCardStatus("valid", "Kortit kunnossa", detail);
+  }
+  async function cardsApi(action, data = {}) {
+    const response = await fetch(HARD_CARDS_API_URL, {
+      method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action, ...data }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || "Korttipalvelu ei vastaa");
+    return result;
+  }
+  async function refreshCardStatus() {
+    if (!session?.authed || !session.user || !session.cardToken) return;
+    setCardStatus("loading", "Tarkistetaan korttien tilaa…", "Odota hetki");
+    try {
+      const data = await Promise.race([
+        cardsApi("workStatus", { token: session.cardToken }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Aikakatkaisu")), 8000))
+      ]);
+      if (!data.status) throw new Error("Korttitilaa ei saatu");
+      renderCardStatus(data.status);
+    } catch (_) {
+      setCardStatus("error", "Korttien tilaa ei voitu tarkistaa", "Työaika toimii normaalisti");
+    }
+  }
 
   function goSettings() {
     showView("viewSettings");
@@ -1040,18 +1077,25 @@ function bindEvents() {
 
     // PIN
     $("btnPinBack")?.addEventListener("click", () => showView("viewLogin"));
-    $("btnPinOk")?.addEventListener("click", () => {
+    $("btnPinOk")?.addEventListener("click", async () => {
       const pin = ($("pinInput").value || "").trim();
-      if (pin === PIN) {
+      if (!pin) return;
+      $("btnPinOk").disabled = true;
+      try {
+        const result = await cardsApi("workLogin", { user: session.user, pin });
         session.authed = true;
+        session.cardToken = result.token;
         persist();
         $("pinNote").textContent = "";
         toast("OK");
-        goWork(); // <-- SUORAAN TYÖAIKAAN
-      } else {
-        $("pinNote").textContent = "Väärä PIN.";
-        toast("Väärä PIN");
-      }
+        if (result.status) renderCardStatus(result.status);
+        goWork();
+      } catch (error) {
+        session.authed = false;
+        session.cardToken = "";
+        $("pinNote").textContent = error.message || "Väärä PIN.";
+        toast("Kirjautuminen epäonnistui");
+      } finally { $("btnPinOk").disabled = false; }
       setSubtitle();
     });
     $("pinInput")?.addEventListener("keydown", (e) => {
@@ -1175,9 +1219,11 @@ $("btnAddPlate")?.addEventListener("click", () => {
     setSubtitle();
 
     // Boot route: jos authed, suoraan workiin (ei menu)
-    if (session && session.authed && session.user) {
+    if (session && session.authed && session.user && session.cardToken) {
       goWork();
     } else {
+      session = { user: "", authed: false, cardToken: "" };
+      persist();
       showView("viewLogin");
     }
 
@@ -1188,6 +1234,10 @@ $("btnAddPlate")?.addEventListener("click", () => {
   }
 
   init();
+
+  $("cardStatus")?.addEventListener("click", () => { window.location.href = HARD_CARDS_URL; });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshCardStatus(); });
+  setInterval(refreshCardStatus, 5 * 60 * 1000);
 
   $("btnCards")?.addEventListener("click", () => {
     window.location.href = HARD_CARDS_URL;
