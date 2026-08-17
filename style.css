@@ -86,6 +86,14 @@ html, body {
   font-size:13px;
 }
 
+.card-status{width:100%;margin-top:12px;padding:12px;display:flex;align-items:center;gap:10px;text-align:left;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.06);color:#fff;cursor:pointer}
+.card-status-dot{width:14px;height:14px;border-radius:50%;background:#aeb7c2;flex:0 0 auto}
+.card-status b,.card-status small{display:block}.card-status small{margin-top:2px;color:var(--muted);font-size:12px}
+.card-status-valid .card-status-dot{background:var(--green)}
+.card-status-warning .card-status-dot{background:var(--yellow)}
+.card-status-expired .card-status-dot{background:var(--red)}
+.card-status-error .card-status-dot{background:#aeb7c2}
+
 /* ===============================
    INPUTS
 ================================ */
