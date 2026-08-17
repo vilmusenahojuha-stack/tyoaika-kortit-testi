@@ -1235,11 +1235,11 @@ $("btnAddPlate")?.addEventListener("click", () => {
 
   init();
 
-  $("cardStatus")?.addEventListener("click", () => { window.location.href = HARD_CARDS_URL; });
+  $("cardStatus")?.addEventListener("click", () => { window.location.href = HARD_CARDS_URL + "#workToken=" + encodeURIComponent(session.cardToken || ""); });
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshCardStatus(); });
   setInterval(refreshCardStatus, 5 * 60 * 1000);
 
   $("btnCards")?.addEventListener("click", () => {
-    window.location.href = HARD_CARDS_URL;
+    window.location.href = HARD_CARDS_URL + "#workToken=" + encodeURIComponent(session.cardToken || "");
   });
 })();
