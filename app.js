@@ -1069,7 +1069,7 @@ function bindEvents() {
     if (!ok) return;
 
     running = null;
-    localStorage.removeItem("ta_running_v1");
+    localStorage.removeItem(STORAGE.running);
     persist();
     toast("Käynnissä oleva työ poistettu.");
     renderAll({ full: true });
