@@ -18,16 +18,16 @@
   const HARD_FUEL_URL = "https://vilmusenahojuha-stack.github.io/Tankkaus/";
 
 const STORAGE = {
-    session: "ta_session_v1",
-    cfg: "ta_cfg_v1",
-    running: "ta_running_v1",
-    history: "ta_history_v1",
+    session: "ta_test_session_v1",
+    cfg: "ta_test_cfg_v1",
+    running: "ta_test_running_v1",
+    history: "ta_test_history_v1",
   };
 
   const DEFAULT_CFG = {
   sheetsUrl: "https://script.google.com/macros/s/AKfycbzrkZq5yOUCXspBLfiOzGh-5f8nf1enThMilrFyuiHXDAFsZ1ljn9oVXPczBQI_22cwoQ/exec",
   fuelUrl: "https://vilmusenahojuha-stack.github.io/Tankkaus/",
-  plates: [],
+  plates: ["TEST-001"],
 };
 
   // ---------- DOM HELPERS ----------
