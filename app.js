@@ -16,6 +16,7 @@
   // Hardcoded endpoints
   const HARD_SHEETS_URL = "";
   const HARD_FUEL_URL = "https://vilmusenahojuha-stack.github.io/Tankkaus/";
+  const HARD_CARDS_URL = "https://vilmusenahojuha-stack.github.io/kortit-perehdytykset/";
 
 const STORAGE = {
     session: "ta_test_session_v1",
@@ -1187,4 +1188,8 @@ $("btnAddPlate")?.addEventListener("click", () => {
   }
 
   init();
+
+  $("btnCards")?.addEventListener("click", () => {
+    window.location.href = HARD_CARDS_URL;
+  });
 })();
