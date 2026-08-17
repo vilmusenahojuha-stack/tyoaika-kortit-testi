@@ -121,16 +121,6 @@ function getSelectedPlate(){ return normalizePlate($("plateSelect")?.value || ""
     const m = min % 60;
     return `${pad2(h)}:${pad2(m)}`;
   }
-
-  // Parse hours coming from Sheets. Night hours may come as string with comma (e.g. "3,5").
-  function parseNightHours(v, fallback = 0) {
-    if (v == null) return fallback;
-    if (typeof v === "number") return Number.isFinite(v) ? v : fallback;
-    const s = String(v).trim().replace(/\s+/g, "").replace(",", ".");
-    const n = Number(s);
-    return Number.isFinite(n) ? n : fallback;
-  }
-
   
   // Minutes -> decimal hours string (60min=1, 90min=1.5)
   function minutesToHoursDec(min, decimals = 2) {
@@ -310,7 +300,7 @@ function normalizeRow(r) {
     breakDeductMin: Number(r.breakDeductMin || 0),
     dayMin: Number(r.dayMin || 0) || Math.round(Number(r.dayH || 0) * 60),
     eveMin: Number(r.eveMin || 0) || Math.round(Number(r.eveH || 0) * 60),
-    nightMin: Number(r.nightMin || 0) || Math.round(parseNightHours(r.nightH, 0) * 60),
+    nightMin: Number(r.nightMin || 0) || Math.round(Number(r.nightH || 0) * 60),
     totalMin: Number(r.totalMin || 0) || Math.round(Number(r.totalH || 0) * 60),
     perDiem: Number(r.perDiem || 0),
     approved: Boolean(r.approved),
@@ -343,7 +333,7 @@ async function fetchHistoryFromSheets(user) {
     breakDeductMin: Number(r.breakDeductMin || 0),
     dayMin: Number(r.dayMin || 0) || Math.round(Number(r.dayH || 0) * 60),
     eveMin: Number(r.eveMin || 0) || Math.round(Number(r.eveH || 0) * 60),
-    nightMin: Number(r.nightMin || 0) || Math.round(parseNightHours(r.nightH, 0) * 60),
+    nightMin: Number(r.nightMin || 0) || Math.round(Number(r.nightH || 0) * 60),
     totalMin: Number(r.totalMin || 0) || Math.round(Number(r.totalH || 0) * 60),
     perDiem: Number(r.perDiem || 0),
     approved: Boolean(r.approved),
