@@ -27,7 +27,7 @@ const STORAGE = {
   const DEFAULT_CFG = {
   sheetsUrl: "https://script.google.com/macros/s/AKfycbzrkZq5yOUCXspBLfiOzGh-5f8nf1enThMilrFyuiHXDAFsZ1ljn9oVXPczBQI_22cwoQ/exec",
   fuelUrl: "https://vilmusenahojuha-stack.github.io/Tankkaus/",
-  plates: ["TEST-001"],
+  plates: ["ISS-440", "GPG-830"],
 };
 
   // ---------- DOM HELPERS ----------
@@ -91,6 +91,12 @@ function renderPlates(){
 
   // ---------- STATE ----------
   let cfg = Sget(STORAGE.cfg, DEFAULT_CFG);
+  // Päivitä testiversion rekisterit kerran; myöhemmin lisätyt rekisterit säilyvät.
+  if (cfg.platesVersion !== 2) {
+    cfg.plates = ["ISS-440", "GPG-830"];
+    cfg.platesVersion = 2;
+    Sset(STORAGE.cfg, cfg);
+  }
   let session = Sget(STORAGE.session, { user: "", authed: false, cardToken: "" });
   let running = Sget(STORAGE.running, null);   // current running day
   let history = Sget(STORAGE.history, []);     // approved rows
