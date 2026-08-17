@@ -5,7 +5,7 @@
 html, body {
   margin: 0; padding: 0;
   background-color: #16070b;
-  background-image: linear-gradient(rgba(18,5,9,.68), rgba(14,4,7,.84)), url("./assets/truck-background.jpg");
+  background-image: linear-gradient(rgba(18,5,9,.56), rgba(14,4,7,.72)), url("./assets/truck-background.jpg");
   background-position: center 52%;
   background-size: cover;
   background-repeat: no-repeat;
