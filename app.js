@@ -102,11 +102,23 @@ function renderPlates(){
       localStorage.setItem(key, JSON.stringify(value));
       return true;
     } catch (error) {
+      storageOperational = false;
       console.error("Paikallinen tallennus epäonnistui", error);
       toast("Laitteen tallennustila ei ole käytettävissä.");
       return false;
     }
   }
+
+  let storageOperational = (() => {
+    try {
+      const key = "__ta_storage_test__";
+      localStorage.setItem(key, "1");
+      localStorage.removeItem(key);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  })();
 
   // ---------- STATE ----------
   let cfg = Sget(STORAGE.cfg, DEFAULT_CFG);
@@ -132,7 +144,6 @@ function renderPlates(){
   // }
 
   // ---------- TIME HELPERS ----------
-  function normalizePlate(s){ return String(s||"").trim().toUpperCase(); }
 function getSelectedPlate(){ return normalizePlate($("plateSelect")?.value || ""); }
   function pad2(n) { return String(n).padStart(2, "0"); }
   function toLocalDateStr(ts) {
@@ -639,10 +650,14 @@ async function refreshHistoryFromSheets() {
   }
 }
   function persist() {
-    Sset(STORAGE.cfg, cfg);
-    Sset(STORAGE.session, session);
-    Sset(STORAGE.running, running);
-    Sset(STORAGE.history, history);
+    const ok = [
+      Sset(STORAGE.cfg, cfg),
+      Sset(STORAGE.session, session),
+      Sset(STORAGE.running, running),
+      Sset(STORAGE.history, history)
+    ].every(Boolean);
+    if (!ok) storageOperational = false;
+    return ok;
   }
 
   function setSubtitle() {
@@ -711,6 +726,8 @@ Yö: ${minutesToText(e.nightMin)} |
 Tauko: ${e.breakTotalMin} min (vähennys ${e.breakDeductMin} min) | 
 Päiväraha: ${perDiemText(e.perDiem)}`;
 
+      const errorLine = e.sent === true ? "" :
+        `<div class="history-error">Tallennusvirhe: ${escapeHtml(e.sentErr || "Odottaa verkkoyhteyttä")}</div>`;
       const div = document.createElement("div");
       div.className = "hist lock";
       div.innerHTML = `
@@ -719,6 +736,7 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
           <div class="time"><b>${escapeHtml(e.user)}</b> — ${minutesToText(e.totalMin)}</div>
           <div class="sub">${escapeHtml(timeLine)}</div>
           <div class="sub">${escapeHtml(sub)}</div>
+          ${errorLine}
         </div>
       `;
       list.appendChild(div);
@@ -892,6 +910,7 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
 
   // ---------- WORK ACTIONS ----------
   async function startWork() {
+    if (!storageOperational) return toast("Työtä ei voi aloittaa: laitteen tallennustila ei toimi.");
     if (!session.authed || !session.user || !session.expiresAt || Date.now() >= Number(session.expiresAt)) {
       goLogin();
       return toast("Istunto vanheni. Kirjaudu uudelleen.");
@@ -913,13 +932,18 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
       state: "running",
       plate,
     };
-    persist();
+    if (!persist()) {
+      running = null;
+      return toast("Työtä ei aloitettu, koska tallennus laitteelle epäonnistui.");
+    }
     toast("Työ aloitettu.");
     renderAll({ full: true });
   }
 
   async function toggleBreak() {
+    if (!storageOperational) return toast("Taukoa ei voi muuttaa: laitteen tallennustila ei toimi.");
     if (!running) return;
+    const previousRunning = JSON.parse(JSON.stringify(running));
     if (running.user !== session.user) return toast(`Käynnissä oleva työ kuuluu käyttäjälle ${running.user}.`);
 
     const label = (running.state === "break") ? "JATKA" : "TAUKO";
@@ -930,13 +954,13 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
     if (running.state === "running") {
       running.state = "break";
       running.breakSegments.push({ s: now });
-      persist();
+      if (!persist()) { running = previousRunning; return toast("Taukoa ei tallennettu."); }
       toast("Tauko alkoi.");
     } else {
       running.state = "running";
       const last = running.breakSegments[running.breakSegments.length - 1];
       if (last && last.s && !last.e) last.e = now;
-      persist();
+      if (!persist()) { running = previousRunning; return toast("Tauon päättymistä ei tallennettu."); }
       toast("Tauko päättyi.");
     }
     renderAll({ full: false });
@@ -1043,6 +1067,7 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
   }
 
   async function approveSummary() {
+    if (!storageOperational) return toast("Päivää ei voi tallentaa: laitteen tallennustila ei toimi.");
     if (!pendingSummary) return;
 
     const startTime = ($("sumStartTime").value || "00:00");
@@ -1093,13 +1118,18 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
       sentErr: "",
     };
 
+    const previousRunning = running;
     history.push(entry);
 
     if (pendingSummary.mode === "stop") {
       running = null;
     }
 
-    persist();
+    if (!persist()) {
+      history = history.filter(item => item !== entry);
+      running = previousRunning;
+      return toast("Päivää ei tallennettu laitteen tallennusvirheen vuoksi.");
+    }
     closeSummary();
     toast("Tallennettu. Lähetetään Sheetiin...");
 
@@ -1109,6 +1139,7 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
 
   // ---------- MANUAL DAY ----------
   function openManual() {
+    if (!storageOperational) return toast("Päivää ei voi lisätä: laitteen tallennustila ei toimi.");
     if (!session.authed || !session.user) return toast("Kirjaudu sisään.");
     const plate = getSelectedPlate();
     if (!plate) return toast("Valitse rekisterinumero ennen manuaalisen päivän lisäämistä.");
@@ -1318,6 +1349,9 @@ $("btnAddPlate")?.addEventListener("click", () => {
 
   // ---------- INIT ----------
   function init() {
+    if (!storageOperational) {
+      setTimeout(() => toast("Varoitus: selaimen paikallinen tallennus ei toimi. Työaikatoiminnot on estetty."), 100);
+    }
     if (!Array.isArray(history)) history = [];
     if (running && !Array.isArray(running.breakSegments)) running.breakSegments = [];
 
