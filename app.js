@@ -420,10 +420,14 @@ async function refreshHistoryFromSheets() {
 
   try {
     const currentPending = history.filter(e => e && e.user === user && e.approved && e.sent !== true);
+    const recentSent = history.filter(e =>
+      e && e.user === user && e.approved && e.sent === true && e.sentAt &&
+      Date.now() - Number(e.sentAt) < 5 * 60 * 1000
+    );
     const otherPending = history.filter(e => e && e.user !== user && e.approved && e.sent !== true);
     const rows = await fetchHistoryFromSheets(user);
     const remoteKeys = new Set(rows.map(entryKey));
-    const unresolved = currentPending.filter(e => !remoteKeys.has(entryKey(e)));
+    const unresolved = [...currentPending, ...recentSent].filter(e => !remoteKeys.has(entryKey(e)));
     history = [...rows, ...unresolved, ...otherPending];
     Sset(STORAGE.history, history);
     Sset(`ta_history_cache_${user}`, rows);
@@ -506,16 +510,20 @@ async function refreshHistoryFromSheets() {
     }
 
     entry.sent = true;
+    entry.sending = false;
+    entry.sentAt = Date.now();
     entry.sentErr = "";
     persist();
+    renderAll({ full: true });
 
-    // tärkein: aina päivitetään historia Sheetistä (tämä renderöi)
+    // Päivitä Sheets-historia taustalla. Paikallinen rivi säilyy näkyvissä.
     await refreshHistoryFromSheets();
 
     return true;
 
   } catch (err) {
     entry.sent = false;
+    entry.sending = false;
     entry.sentErr = String(err?.message || err);
     persist();
 
@@ -725,8 +733,8 @@ async function refreshHistoryFromSheets() {
     if (hint) hint.textContent = `${arr.length} kpl`;
 
     for (const e of arr) {
-      const status = e.sent === true ? "ok" : "err";
-      const statusChar = e.sent === true ? "✔" : "✖";
+      const status = e.sent === true ? "ok" : (e.sending ? "pending" : "err");
+      const statusChar = e.sent === true ? "✔" : (e.sending ? "…" : "✖");
       const timeLine = `${e.startDate} ${e.startTime} → ${e.endDate} ${e.endTime}`;
       const plateTxt = e.plate ? `Auto: ${e.plate} | ` : "";
 	const sub = `${plateTxt}
@@ -737,8 +745,9 @@ Yö: ${minutesToText(e.nightMin)} |
 Tauko: ${e.breakTotalMin} min (vähennys ${e.breakDeductMin} min) | 
 Päiväraha: ${perDiemText(e.perDiem)}`;
 
-      const errorLine = e.sent === true ? "" :
-        `<div class="history-error">Tallennusvirhe: ${escapeHtml(e.sentErr || "Odottaa verkkoyhteyttä")}</div>`;
+      const errorLine = e.sent === true ? "" : e.sending
+        ? `<div class="history-sending">Lähetetään Sheetiin…</div>`
+        : `<div class="history-error">Tallennusvirhe: ${escapeHtml(e.sentErr || "Odottaa verkkoyhteyttä")}</div>`;
       const div = document.createElement("div");
       div.className = "hist lock";
       div.innerHTML = `
@@ -1124,6 +1133,7 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
       approved: true,
       approvedTs: Date.now(),
       sent: false,
+      sending: true,
       plate: pendingSummary.plate || getSelectedPlate(),
       sentAt: null,
       sentErr: "",
@@ -1142,7 +1152,8 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
       return toast("Päivää ei tallennettu laitteen tallennusvirheen vuoksi.");
     }
     closeSummary();
-    toast("Tallennettu. Lähetetään Sheetiin...");
+    renderAll({ full: true });
+    toast("Tallennettu listaan. Lähetetään Sheetiin...");
 
     await trySendEntryToSheets(entry);
     toast(entry.sent ? "Sheets: OK ✔" : "Sheets: epäonnistui ✖");
@@ -1412,7 +1423,7 @@ $("btnAddPlate")?.addEventListener("click", () => {
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js?v=27").catch(error => console.error("Offline-tuki ei käynnistynyt", error));
+      navigator.serviceWorker.register("./sw.js?v=28").catch(error => console.error("Offline-tuki ei käynnistynyt", error));
     });
   }
 
