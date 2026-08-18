@@ -1,10 +1,18 @@
 {
   "name": "Työaikaseuranta",
   "short_name": "Työaika",
-  "start_url": "./?v=26",
+  "start_url": "./?v=27",
   "scope": "./",
   "display": "standalone",
   "background_color": "#16070b",
   "theme_color": "#250c12",
-  "lang": "fi"
+  "lang": "fi",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }
