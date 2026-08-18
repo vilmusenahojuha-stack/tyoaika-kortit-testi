@@ -157,6 +157,15 @@ function doPost(e) {
   }
 }
 
+function authorizeCardConnection() {
+  const response = UrlFetchApp.fetch(CARDS_API_URL_, {
+    method: "get",
+    muteHttpExceptions: true
+  });
+  Logger.log("Korttipalveluyhteys: HTTP " + response.getResponseCode());
+  return "Valtuutus valmis";
+}
+
 function verifyWorkTokenWithCards_(token) {
   const value = String(token || "").trim();
   if (!value) throw new Error("Työaikaistunto puuttuu.");
