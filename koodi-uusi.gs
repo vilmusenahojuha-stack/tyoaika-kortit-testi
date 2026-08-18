@@ -46,6 +46,7 @@ function doPost(e) {
     // ---------- APPEND ----------
     if (body.action === "append" && Array.isArray(body.rows)) {
       if (!body.rows.length) return ok_({ ok: true, added: 0 });
+      if (body.rows.length > 100) throw new Error("Yhdessä pyynnössä voi lähettää enintään 100 riviä.");
       body.rows.forEach(r => {
         if (String(r.user || authenticatedUser).trim() !== authenticatedUser) throw new Error("Rivin käyttäjä ei vastaa istuntoa.");
         validateWorkRow_(r);
@@ -193,7 +194,8 @@ function validateWorkRow_(r) {
   if (totalH < 0 || totalH > 168) throw new Error("Työajan määrä ei kelpaa.");
   const perDiem = num_(r.perDiem, 0);
   if ([0, 1, 2].indexOf(perDiem) < 0) throw new Error("Päiväraha ei kelpaa.");
-  if (String(r.plate || "").length > 20) throw new Error("Rekisterinumero ei kelpaa.");
+  const plate = String(r.plate || "").trim();
+  if (plate.length < 2 || plate.length > 20) throw new Error("Rekisterinumero ei kelpaa.");
 }
 
 function ensureHeadersAndMaybeUpgrade_(sheet, HEADERS){
@@ -246,10 +248,9 @@ function ensureHeadersAndMaybeUpgrade_(sheet, HEADERS){
     return;
   }
 
-  // Fallback: force our header row, keep existing data as-is (best effort)
-  // This prevents "only start/end visible" cases from breaking list mapping forever.
-  sheet.getRange(1,1,1,HEADERS.length).setValues([HEADERS]);
-  formatHours_(sheet);
+  // Tuntematonta sarakejärjestystä ei saa korjata automaattisesti,
+  // koska tietojen kohdistuminen voisi muuttua.
+  throw new Error("Sheetsin sarakkeet eivät vastaa työaikasovelluksen rakennetta. Otsikoita ei muutettu.");
 }
 
 function formatHours_(sheet){
