@@ -243,3 +243,14 @@ input::placeholder{ color:var(--muted2); }
   font-size:13px;
   overflow-wrap:anywhere;
 }
+
+.history-sending{
+  padding:8px 10px;
+  margin-top:6px;
+  border-radius:10px;
+  border:1px solid rgba(255,209,102,.45);
+  background:rgba(255,209,102,.12);
+  color:#ffe29a;
+  font-size:13px;
+}
+.status.pending{ color:var(--yellow); }
