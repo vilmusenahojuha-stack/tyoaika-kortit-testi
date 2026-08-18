@@ -637,10 +637,10 @@ async function refreshHistoryFromSheets() {
       const timeLine = `${e.startDate} ${e.startTime} → ${e.endDate} ${e.endTime}`;
       const plateTxt = e.plate ? `Auto: ${e.plate} | ` : "";
 	const sub = `${plateTxt}
-Työaika: ${minutesToText(e.totalMin)} h | 
-Päivä: ${minutesToText(e.dayMin)} h | 
-Ilta: ${minutesToText(e.eveMin)} h | 
-Yö: ${minutesToText(e.nightMin)} h | 
+Työaika: ${minutesToText(e.totalMin)} | 
+Päivä: ${minutesToText(e.dayMin)} | 
+Ilta: ${minutesToText(e.eveMin)} | 
+Yö: ${minutesToText(e.nightMin)} | 
 Tauko: ${e.breakTotalMin} min (vähennys ${e.breakDeductMin} min) | 
 Päiväraha: ${perDiemText(e.perDiem)}`;
 
