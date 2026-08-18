@@ -119,6 +119,7 @@ function renderPlates(){
   let session = Sget(STORAGE.session, { user: "", authed: false, cardToken: "" });
   let running = Sget(STORAGE.running, null);   // current running day
   let history = Sget(STORAGE.history, []);     // approved rows
+  let syncInProgress = false;
 
   // running structure:
   // {
@@ -491,11 +492,21 @@ async function refreshHistoryFromSheets() {
   }
 }
 
-  async function syncUnsent() {
+  async function syncUnsent({ silent = false } = {}) {
+    if (syncInProgress) return;
+    syncInProgress = true;
     const url = (HARD_SHEETS_URL || (cfg.sheetsUrl || "")).trim();
     const unsent = history.filter(h => h.approved && h.sent !== true);
-    if (!unsent.length) return toast("Ei lähettämättömiä.");
-    if (!url) return toast(`Sheets URL puuttuu. Jonossa ${unsent.length}.`);
+    if (!unsent.length) {
+      syncInProgress = false;
+      if (!silent) toast("Ei lähettämättömiä.");
+      return;
+    }
+    if (!url) {
+      syncInProgress = false;
+      if (!silent) toast(`Sheets URL puuttuu. Jonossa ${unsent.length}.`);
+      return;
+    }
 
     const payload = { action: "append", rows: unsent.map(entryToSheetRow) };
 
@@ -516,7 +527,9 @@ async function refreshHistoryFromSheets() {
         toast("Lähetys epäonnistui ✖");
       }
     } catch (err) {
-      toast(`Virhe: ${String(err && err.message ? err.message : err)}`);
+      if (!silent) toast(`Virhe: ${String(err && err.message ? err.message : err)}`);
+    } finally {
+      syncInProgress = false;
     }
   }
 
@@ -644,6 +657,15 @@ async function refreshHistoryFromSheets() {
     return "Ei";
   }
 
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
   function renderHistory() {
     const list = $("historyList");
     const hint = $("historyHint");
@@ -678,11 +700,11 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
       const div = document.createElement("div");
       div.className = "hist lock";
       div.innerHTML = `
-        <div class="status ${status}" title="${e.sent === true ? "Lähetetty" : (e.sentErr || "Ei lähetetty")}">${statusChar}</div>
+        <div class="status ${status}" title="${escapeHtml(e.sent === true ? "Lähetetty" : (e.sentErr || "Ei lähetetty"))}">${statusChar}</div>
         <div class="meta">
-          <div class="time"><b>${e.user}</b> — ${minutesToText(e.totalMin)}</div>
-          <div class="sub">${timeLine}</div>
-          <div class="sub">${sub}</div>
+          <div class="time"><b>${escapeHtml(e.user)}</b> — ${minutesToText(e.totalMin)}</div>
+          <div class="sub">${escapeHtml(timeLine)}</div>
+          <div class="sub">${escapeHtml(sub)}</div>
         </div>
       `;
       list.appendChild(div);
@@ -1299,6 +1321,32 @@ $("btnAddPlate")?.addEventListener("click", () => {
         toast("18 tunnin istunto päättyi.");
       }
     }, 60000);
+  }
+
+  window.addEventListener("storage", (event) => {
+    if (event.key === STORAGE.running) {
+      running = Sget(STORAGE.running, null);
+      renderPlates();
+      renderAll({ full: false });
+    }
+    if (event.key === STORAGE.history) {
+      history = Sget(STORAGE.history, []);
+      renderAll({ full: true });
+    }
+  });
+
+  window.addEventListener("online", async () => {
+    if (!session?.authed) return;
+    await refreshHistoryFromSheets();
+    await syncUnsent({ silent: true });
+    await refreshHistoryFromSheets();
+    toast("Verkkoyhteys palautui.");
+  });
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js?v=21").catch(error => console.error("Offline-tuki ei käynnistynyt", error));
+    });
   }
 
   init();
