@@ -397,19 +397,21 @@ async function refreshHistoryFromSheets() {
   if (!user) return;
 
   try {
-    const pending = history.filter(e => e && e.approved && e.sent !== true);
+    const currentPending = history.filter(e => e && e.user === user && e.approved && e.sent !== true);
+    const otherPending = history.filter(e => e && e.user !== user && e.approved && e.sent !== true);
     const rows = await fetchHistoryFromSheets(user);
     const remoteKeys = new Set(rows.map(entryKey));
-    const unresolved = pending.filter(e => !remoteKeys.has(entryKey(e)));
-    history = [...rows, ...unresolved];
+    const unresolved = currentPending.filter(e => !remoteKeys.has(entryKey(e)));
+    history = [...rows, ...unresolved, ...otherPending];
     Sset(STORAGE.history, history);
     Sset(`ta_history_cache_${user}`, rows);
     renderAll({ full: true });
   } catch (err) {
-    const pending = history.filter(e => e && e.approved && e.sent !== true);
+    const currentPending = history.filter(e => e && e.user === user && e.approved && e.sent !== true);
+    const otherPending = history.filter(e => e && e.user !== user && e.approved && e.sent !== true);
     const cached = Sget(`ta_history_cache_${user}`, []);
-    const pendingKeys = new Set(pending.map(entryKey));
-    history = [...cached.filter(e => !pendingKeys.has(entryKey(e))), ...pending];
+    const pendingKeys = new Set(currentPending.map(entryKey));
+    history = [...cached.filter(e => !pendingKeys.has(entryKey(e))), ...currentPending, ...otherPending];
     Sset(STORAGE.history, history);
     renderAll({ full: true });
     toast("Offline-tila: lähettämättömät merkinnät säilyvät jonossa.");
@@ -502,41 +504,44 @@ async function refreshHistoryFromSheets() {
 }
 
   async function syncUnsent({ silent = false } = {}) {
-    if (syncInProgress) return;
+    if (syncInProgress || !session?.user) return;
     syncInProgress = true;
-    const url = (HARD_SHEETS_URL || (cfg.sheetsUrl || "")).trim();
-    const unsent = history.filter(h => h.approved && h.sent !== true);
+    const url = HARD_SHEETS_URL.trim();
+    const unsent = history.filter(h => h.user === session.user && h.approved && h.sent !== true);
+
     if (!unsent.length) {
       syncInProgress = false;
       if (!silent) toast("Ei lähettämättömiä.");
       return;
     }
-    if (!url) {
-      syncInProgress = false;
-      if (!silent) toast(`Sheets URL puuttuu. Jonossa ${unsent.length}.`);
-      return;
-    }
 
-    const payload = { action: "append", rows: unsent.map(entryToSheetRow) };
+    let sentCount = 0;
+    let failedCount = 0;
+    if (!silent) toast(`Lähetetään ${unsent.length} kpl...`);
 
-    toast(`Lähetetään ${unsent.length} kpl...`);
     try {
-      const r = await postSheets(url, payload);
-      if (r.ok) {
-        const now = Date.now();
-        for (const e of unsent) {
-          e.sent = true;
-          e.sentAt = now;
-          e.sentErr = "";
+      for (const entry of unsent) {
+        try {
+          const result = await postSheets(url, { action: "append", rows: [entryToSheetRow(entry)] });
+          if (!result.ok) throw new Error(result?.data?.error || "Sheets-vastaus ei kelpaa");
+          entry.sent = true;
+          entry.sentAt = Date.now();
+          entry.sentErr = "";
+          sentCount++;
+        } catch (error) {
+          entry.sent = false;
+          entry.sentErr = String(error?.message || error);
+          failedCount++;
         }
         persist();
         renderAll({ full: true });
-        toast("Lähetys onnistui ✔");
-      } else {
-        toast("Lähetys epäonnistui ✖");
       }
-    } catch (err) {
-      if (!silent) toast(`Virhe: ${String(err && err.message ? err.message : err)}`);
+
+      if (sentCount) await refreshHistoryFromSheets();
+      if (!silent) {
+        if (!failedCount) toast(`Lähetys onnistui: ${sentCount} ✔`);
+        else toast(`Lähetetty ${sentCount}, jonossa ${failedCount}.`);
+      }
     } finally {
       syncInProgress = false;
     }
@@ -651,7 +656,7 @@ async function refreshHistoryFromSheets() {
   function updateUnsentCount() {
     const el = $("unsentCount");
     if (!el) return;
-    const n = history.filter(h => h.approved && h.sent !== true).length;
+    const n = history.filter(h => h.user === session.user && h.approved && h.sent !== true).length;
     el.textContent = n ? `Jonossa: ${n}` : "";
   }
 
@@ -680,9 +685,9 @@ async function refreshHistoryFromSheets() {
     const hint = $("historyHint");
     if (!list) return;
 
-    const arr = [...history].sort((a,b) =>
-  new Date(b.timestamp || 0) - new Date(a.timestamp || 0)
-);
+    const arr = history
+      .filter(e => e.user === session.user)
+      .sort((a,b) => Number(b.approvedTs || Date.parse(b.timestamp) || 0) - Number(a.approvedTs || Date.parse(a.timestamp) || 0));
 
     list.innerHTML = "";
     if (!arr.length) {
@@ -724,7 +729,9 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
     const now = Date.now();
 
     // totals from history
-    const histTotal = history.reduce((sum, e) => sum + (e.totalMin || 0), 0);
+    const histTotal = history
+      .filter(e => e.user === session.user)
+      .reduce((sum, e) => sum + (e.totalMin || 0), 0);
 
     let todayMin = 0;
     let breakMin = 0;
@@ -823,6 +830,10 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
   renderPlates();
   renderAll({ full: true });
   await refreshHistoryFromSheets();
+  if (navigator.onLine) {
+    await syncUnsent({ silent: true });
+    await refreshHistoryFromSheets();
+  }
 }
 
   function setCardStatus(kind, title, detail) {
