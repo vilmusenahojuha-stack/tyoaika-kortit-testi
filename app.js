@@ -311,7 +311,7 @@ async function sheetsPost(payload) {
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, workToken: session?.cardToken || "" }),
   });
 
   const txt = await res.text();
@@ -421,7 +421,7 @@ async function refreshHistoryFromSheets() {
       res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, workToken: session?.cardToken || "" }),
         signal: controller.signal,
       });
     } finally {
@@ -1353,7 +1353,7 @@ $("btnAddPlate")?.addEventListener("click", () => {
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js?v=22").catch(error => console.error("Offline-tuki ei käynnistynyt", error));
+      navigator.serviceWorker.register("./sw.js?v=24").catch(error => console.error("Offline-tuki ei käynnistynyt", error));
     });
   }
 
