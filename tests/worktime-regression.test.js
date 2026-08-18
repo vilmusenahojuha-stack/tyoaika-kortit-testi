@@ -22,7 +22,7 @@ assert.match(app, /AKfycbyFO7eewNr2L-PRgRktrBwYUHA9ub5JzDG6Vf9SyJEcvUDY1wP8o2IKO
 assert.doesNotMatch(app, /ta_session_v1|ta_running_v1|ta_history_v1/);
 
 const htmlIds = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]));
-const dynamicIds = new Set(["modalConfirm", "confirmTitle", "confirmText", "confirmCancel", "confirmOk"]);
+const dynamicIds = new Set(["modalConfirm", "confirmTitle", "confText", "confOk", "confCancel", "confClose"]);
 const referencedIds = [...app.matchAll(/\$\("([^"]+)"\)/g)].map(m => m[1]);
 const missing = [...new Set(referencedIds.filter(id => !htmlIds.has(id) && !dynamicIds.has(id)))];
 assert.deepEqual(missing, [], "app.js references missing DOM ids");
