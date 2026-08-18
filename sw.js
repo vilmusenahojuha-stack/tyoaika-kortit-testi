@@ -1,10 +1,10 @@
-const CACHE_NAME = "tyoaika-testi-v25";
+const CACHE_NAME = "tyoaika-uusi-v26";
 const STATIC_FILES = [
   "./",
   "./index.html",
-  "./style.css?v=25",
-  "./app.js?v=25",
-  "./manifest.json?v=25",
+  "./style.css?v=26",
+  "./app.js?v=26",
+  "./manifest.json?v=26",
   "./assets/truck-background.jpg"
 ];
 
