@@ -15,9 +15,9 @@ new Function(app);
 new Function(sw);
 assert.match(html, /Content-Security-Policy/);
 assert.match(css, /\.history-error\s*\{/);
-assert.equal(manifest.start_url, "./?v=27");
+assert.equal(manifest.start_url, "./?v=28");
 assert.equal(manifest.icons[0].src, "icon.svg");
-assert.match(sw, /tyoaika-uusi-v27/);
+assert.match(sw, /tyoaika-uusi-v28/);
 assert.match(app, /AKfycbyFO7eewNr2L-PRgRktrBwYUHA9ub5JzDG6Vf9SyJEcvUDY1wP8o2IKOkzCqzzH75mN/);
 assert.doesNotMatch(app, /ta_session_v1|ta_running_v1|ta_history_v1/);
 
