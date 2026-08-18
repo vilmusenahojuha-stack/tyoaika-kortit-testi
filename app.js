@@ -134,6 +134,12 @@ function getSelectedPlate(){ return normalizePlate($("plateSelect")?.value || ""
     const m = min % 60;
     return `${pad2(h)}:${pad2(m)}`;
   }
+  function minutesToText(min) {
+    min = Math.max(0, Math.round(min));
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return `${h} h ${m} min`;
+  }
   
   // Minutes -> decimal hours string (60min=1, 90min=1.5)
   function minutesToHoursDec(min, decimals = 2) {
@@ -631,10 +637,10 @@ async function refreshHistoryFromSheets() {
       const timeLine = `${e.startDate} ${e.startTime} → ${e.endDate} ${e.endTime}`;
       const plateTxt = e.plate ? `Auto: ${e.plate} | ` : "";
 	const sub = `${plateTxt}
-Työaika: ${minutesToHHMM(e.totalMin)} h | 
-Päivä: ${minutesToHHMM(e.dayMin)} h | 
-Ilta: ${minutesToHHMM(e.eveMin)} h | 
-Yö: ${minutesToHHMM(e.nightMin)} h | 
+Työaika: ${minutesToText(e.totalMin)} h | 
+Päivä: ${minutesToText(e.dayMin)} h | 
+Ilta: ${minutesToText(e.eveMin)} h | 
+Yö: ${minutesToText(e.nightMin)} h | 
 Tauko: ${e.breakTotalMin} min (vähennys ${e.breakDeductMin} min) | 
 Päiväraha: ${perDiemText(e.perDiem)}`;
 
@@ -643,7 +649,7 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
       div.innerHTML = `
         <div class="status ${status}" title="${e.sent === true ? "Lähetetty" : (e.sentErr || "Ei lähetetty")}">${statusChar}</div>
         <div class="meta">
-          <div class="time"><b>${e.user}</b> — ${minutesToHHMM(e.totalMin)}</div>
+          <div class="time"><b>${e.user}</b> — ${minutesToText(e.totalMin)}</div>
           <div class="sub">${timeLine}</div>
           <div class="sub">${sub}</div>
         </div>
@@ -678,8 +684,8 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
       deductMin = deduct;
     }
 
-    $("liveToday").textContent = minutesToHHMM(todayMin);
-    $("liveAll").textContent = minutesToHHMM(histTotal + todayMin);
+    $("liveToday").textContent = minutesToText(todayMin);
+    $("liveAll").textContent = minutesToText(histTotal + todayMin);
     $("liveBreak").textContent = String(breakMin);
     $("liveDeduct").textContent = String(deductMin);
 
@@ -935,10 +941,10 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
     const totalMin = adjSeg.day + adjSeg.eve + adjSeg.night;
 
     $("sumDeduct").textContent = String(deductMin);
-    $("sumTotal").textContent = minutesToHHMM(totalMin);
-    $("sumDay").textContent = minutesToHHMM(adjSeg.day);
-    $("sumEve").textContent = minutesToHHMM(adjSeg.eve);
-    $("sumNight").textContent = minutesToHHMM(adjSeg.night);
+    $("sumTotal").textContent = minutesToText(totalMin);
+    $("sumDay").textContent = minutesToText(adjSeg.day);
+    $("sumEve").textContent = minutesToText(adjSeg.eve);
+    $("sumNight").textContent = minutesToText(adjSeg.night);
   }
 
   function closeSummary() {
