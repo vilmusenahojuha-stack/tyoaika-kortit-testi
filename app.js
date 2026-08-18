@@ -18,14 +18,14 @@
   const HARD_CARDS_API_URL = "https://script.google.com/macros/s/AKfycbws1ods-A_0YnJ04cWHU8D5bTdGVg8Z36qA6lsuyEUHYuDlneG_KkOd32ZP8tK1-4Vc/exec";
 
 const STORAGE = {
-    session: "ta_test_session_v1",
-    cfg: "ta_test_cfg_v1",
-    running: "ta_test_running_v1",
-    history: "ta_test_history_v1",
+    session: "ta_new_session_v2",
+    cfg: "ta_new_cfg_v2",
+    running: "ta_new_running_v2",
+    history: "ta_new_history_v2",
   };
 
   const DEFAULT_CFG = {
-  sheetsUrl: "https://script.google.com/macros/s/AKfycbzrkZq5yOUCXspBLfiOzGh-5f8nf1enThMilrFyuiHXDAFsZ1ljn9oVXPczBQI_22cwoQ/exec",
+  sheetsUrl: "https://script.google.com/macros/s/AKfycbyFO7eewNr2L-PRgRktrBwYUHA9ub5JzDG6Vf9SyJEcvUDY1wP8o2IKOkzCqzzH75mN/exec",
   fuelUrl: "https://vilmusenahojuha-stack.github.io/Tankkaus/",
   plates: ["ISS-440", "GPG-830"],
 };
@@ -110,6 +110,8 @@ function renderPlates(){
 
   // ---------- STATE ----------
   let cfg = Sget(STORAGE.cfg, DEFAULT_CFG);
+  // Uusi sovellus käyttää aina vain omaa kiinteää Sheets-palvelua.
+  cfg.sheetsUrl = HARD_SHEETS_URL;
   // Päivitä testiversion rekisterit kerran; myöhemmin lisätyt rekisterit säilyvät.
   if (cfg.platesVersion !== 3) {
     cfg.plates = ["ISS-440", "GPG-830"];
@@ -870,7 +872,8 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
 
   function goSettings() {
     showView("viewSettings");
-    $("sheetsUrl").value = cfg.sheetsUrl || "";
+    $("sheetsUrl").value = HARD_SHEETS_URL;
+    $("sheetsUrl").disabled = true;
     $("fuelUrl").value = cfg.fuelUrl || "";
     $("settingsNote").textContent = "";
     updateUnsentCount();
@@ -1291,7 +1294,7 @@ $("btnAddPlate")?.addEventListener("click", () => {
     // Settings
     $("btnBackMenu2")?.addEventListener("click", goWork);
     $("btnSaveSettings")?.addEventListener("click", () => {
-      cfg.sheetsUrl = ($("sheetsUrl").value || "").trim();
+      cfg.sheetsUrl = HARD_SHEETS_URL;
       cfg.fuelUrl = ($("fuelUrl").value || "").trim();
       persist();
       $("settingsNote").textContent = "Tallennettu.";
@@ -1353,7 +1356,7 @@ $("btnAddPlate")?.addEventListener("click", () => {
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js?v=25").catch(error => console.error("Offline-tuki ei käynnistynyt", error));
+      navigator.serviceWorker.register("./sw.js?v=26").catch(error => console.error("Offline-tuki ei käynnistynyt", error));
     });
   }
 
