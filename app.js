@@ -56,7 +56,12 @@ function renderPlates(){
     sel.appendChild(o);
   }
 
-  if ((cfg.plates || []).includes(cur)) sel.value = cur;
+  const restore = (cfg.plates || []).includes(cur)
+    ? cur
+    : ((running && running.user === session?.user && cfg.plates.includes(running.plate))
+      ? running.plate
+      : (cfg.plates.includes(cfg.lastPlate) ? cfg.lastPlate : ""));
+  sel.value = restore;
 }
   const $ = (id) => document.getElementById(id);
   const toastEl = $("toast");
@@ -93,7 +98,14 @@ function renderPlates(){
     }
   }
   function Sset(key, value) {
-    localStorage.setItem(key, JSON.stringify(value));
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+      return true;
+    } catch (error) {
+      console.error("Paikallinen tallennus epäonnistui", error);
+      toast("Laitteen tallennustila ei ole käytettävissä.");
+      return false;
+    }
   }
 
   // ---------- STATE ----------
@@ -324,6 +336,7 @@ function normalizeRow(r) {
     perDiem: Number(r.perDiem || 0),
     approved: Boolean(r.approved),
     timestamp: r.timestamp || "",
+    id: r.id || "",
     // paikallinen apukenttä (ei pakko käyttää)
     sent: true,
   };
@@ -357,8 +370,15 @@ async function fetchHistoryFromSheets(user) {
     perDiem: Number(r.perDiem || 0),
     approved: Boolean(r.approved),
     timestamp: r.timestamp || "",
+    id: r.id || "",
     sent: true
   }));
+}
+
+function entryKey(e) {
+  if (e && e.id) return "id:" + String(e.id);
+  return [e?.user, e?.plate, e?.startDate, e?.startTime, e?.endDate, e?.endTime, e?.totalMin]
+    .map(v => String(v ?? "")).join("|");
 }
 
 // ---------- HISTORY: always from Sheets ----------
@@ -367,40 +387,51 @@ async function refreshHistoryFromSheets() {
   if (!user) return;
 
   try {
+    const pending = history.filter(e => e && e.approved && e.sent !== true);
     const rows = await fetchHistoryFromSheets(user);
-
-    history = rows;
-    Sset(`ta_history_cache_${user}`, history);
-
+    const remoteKeys = new Set(rows.map(entryKey));
+    const unresolved = pending.filter(e => !remoteKeys.has(entryKey(e)));
+    history = [...rows, ...unresolved];
+    Sset(STORAGE.history, history);
+    Sset(`ta_history_cache_${user}`, rows);
     renderAll({ full: true });
-
   } catch (err) {
-    const cached = Sget(`ta_history_cache_${user}`, null);
-    if (cached) {
-      history = cached;
-      renderAll({ full: true });
-      toast("Offline-tila: näytetään viimeisin tallennettu historia.");
-    } else {
-      history = [];
-      renderAll({ full: true });
-      toast("Historiaa ei saatu ladattua.");
-    }
+    const pending = history.filter(e => e && e.approved && e.sent !== true);
+    const cached = Sget(`ta_history_cache_${user}`, []);
+    const pendingKeys = new Set(pending.map(entryKey));
+    history = [...cached.filter(e => !pendingKeys.has(entryKey(e))), ...pending];
+    Sset(STORAGE.history, history);
+    renderAll({ full: true });
+    toast("Offline-tila: lähettämättömät merkinnät säilyvät jonossa.");
   }
 }
   async function postSheets(url, payload) {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(payload),
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    let res;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     const txt = await res.text();
     let data = null;
     try { data = JSON.parse(txt); } catch {}
     return { ok: res.ok && data && data.ok === true, resOk: res.ok, data, text: txt };
   }
 
+  function decimalHours(min) {
+    return Math.round(((Number(min) || 0) / 60) * 100) / 100;
+  }
+
   function entryToSheetRow(e) {
     return {
+      id: e.id || "",
       user: e.user,
       plate: e.plate || "",
       startDate: e.startDate,
@@ -409,10 +440,10 @@ async function refreshHistoryFromSheets() {
       endTime: e.endTime,
       breakTotalMin: e.breakTotalMin,
       breakDeductMin: e.breakDeductMin,
-      dayH: Number((e.dayMin || 0) / 60),
-      eveH: Number((e.eveMin || 0) / 60),
-      nightH: Number((e.nightMin || 0) / 60),
-      totalH: Number((e.totalMin || 0) / 60),
+      dayH: decimalHours(e.dayMin),
+      eveH: decimalHours(e.eveMin),
+      nightH: decimalHours(e.nightMin),
+      totalH: decimalHours(e.totalMin),
       perDiem: e.perDiem,
       approved: true,
       timestamp: new Date(e.approvedTs).toISOString(),
@@ -752,13 +783,14 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
 
   async function goWork() {
   if (!session || !session.user) return;
-
+  if (!session.expiresAt || Date.now() >= Number(session.expiresAt)) {
+    goLogin();
+    toast("Istunto vanheni. Kirjaudu uudelleen.");
+    return;
+  }
   showView("viewWork");
-
-  // Tyhjennä historia ensin, ettei näy vanha data hetken
-  history = [];
+  renderPlates();
   renderAll({ full: true });
-
   await refreshHistoryFromSheets();
 }
 
@@ -776,10 +808,18 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
     else setCardStatus("valid", "Kortit kunnossa", detail);
   }
   async function cardsApi(action, data = {}) {
-    const response = await fetch(HARD_CARDS_API_URL, {
-      method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action, ...data }),
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    let response;
+    try {
+      response = await fetch(HARD_CARDS_API_URL, {
+        method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action, ...data }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error(result.error || "Korttipalvelu ei vastaa");
     return result;
@@ -809,8 +849,13 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
 
   // ---------- WORK ACTIONS ----------
   async function startWork() {
-    if (!session.authed || !session.user) return toast("Kirjaudu sisään.");
+    if (!session.authed || !session.user || !session.expiresAt || Date.now() >= Number(session.expiresAt)) {
+      goLogin();
+      return toast("Istunto vanheni. Kirjaudu uudelleen.");
+    }
     if (running) return toast("Työ on jo käynnissä.");
+    const plate = getSelectedPlate();
+    if (!plate) return toast("Valitse rekisterinumero ennen työn aloittamista.");
 
     const ok = await confirmModal("Aloitetaanko työ nyt?", "ALOITA");
     if (!ok) return;
@@ -823,6 +868,7 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
       breakSegments: [],
       perDiem: 0,
       state: "running",
+      plate,
     };
     persist();
     toast("Työ aloitettu.");
@@ -892,6 +938,7 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
       endTs,
       breakTotalMin,
       perDiem: running.perDiem || 0,
+      plate: running.plate || getSelectedPlate(),
     };
 
     fillSummaryUI();
@@ -997,7 +1044,7 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
       approved: true,
       approvedTs: Date.now(),
       sent: false,
-	  plate: getSelectedPlate(),
+      plate: pendingSummary.plate || getSelectedPlate(),
       sentAt: null,
       sentErr: "",
     };
@@ -1019,6 +1066,8 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
   // ---------- MANUAL DAY ----------
   function openManual() {
     if (!session.authed || !session.user) return toast("Kirjaudu sisään.");
+    const plate = getSelectedPlate();
+    if (!plate) return toast("Valitse rekisterinumero ennen manuaalisen päivän lisäämistä.");
 
     const d = new Date();
     $("manDate").value = `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
@@ -1058,6 +1107,7 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
       endTs,
       breakTotalMin,
       perDiem,
+      plate: getSelectedPlate(),
     };
 
     closeManual();
@@ -1104,6 +1154,7 @@ function bindEvents() {
         const result = await cardsApi("workLogin", { user: session.user, pin });
         session.authed = true;
         session.cardToken = result.token;
+        session.expiresAt = Date.now() + 18 * 60 * 60 * 1000;
         persist();
         $("pinNote").textContent = "";
         toast("OK");
@@ -1145,8 +1196,8 @@ renderPlates();
 
 // Kun valinta vaihtuu, päivitä käynnissä olevalle päivälle
 $("plateSelect")?.addEventListener("change", () => {
-  if (!running || running.user !== session.user) return;
-  running.plate = getSelectedPlate();
+  cfg.lastPlate = getSelectedPlate();
+  if (running && running.user === session.user) running.plate = getSelectedPlate();
   persist();
 });
 
@@ -1166,6 +1217,7 @@ $("btnAddPlate")?.addEventListener("click", () => {
   // valitse heti lisätty
   const sel = $("plateSelect");
   if (sel) sel.value = p;
+  cfg.lastPlate = p;
 
   // jos työ käynnissä, päivitä siihenkin
   if (running && running.user === session.user) {
@@ -1176,15 +1228,7 @@ $("btnAddPlate")?.addEventListener("click", () => {
   toast("Rekisterinumero lisätty.");
 });
     $("btnBackMenu")?.addEventListener("click", goSettings); // menu pois -> mennään asetuksiin
-    $("btnStart")?.addEventListener("click", async () => {
-  // tallennetaan valittu rekisteri suoraan runningiin kun työ alkaa
-  await startWork();
-  if (running && running.user === session.user) {
-    running.plate = getSelectedPlate();
-    persist();
-    renderAll({ full: false });
-  }
-});
+    $("btnStart")?.addEventListener("click", startWork);
     $("btnBreak")?.addEventListener("click", toggleBreak);
     $("btnStop")?.addEventListener("click", async () => {
       if (!running) return;
@@ -1237,7 +1281,7 @@ $("btnAddPlate")?.addEventListener("click", () => {
     setSubtitle();
 
     // Boot route: jos authed, suoraan workiin (ei menu)
-    if (session && session.authed && session.user && session.cardToken) {
+    if (session && session.authed && session.user && session.cardToken && Number(session.expiresAt) > Date.now()) {
       goWork();
     } else {
       session = { user: "", authed: false, cardToken: "" };
@@ -1249,6 +1293,12 @@ $("btnAddPlate")?.addEventListener("click", () => {
 
     // Live timer (kevyt)
     setInterval(() => renderAll({ full: false }), 1000);
+    setInterval(() => {
+      if (session?.authed && (!session.expiresAt || Date.now() >= Number(session.expiresAt))) {
+        goLogin();
+        toast("18 tunnin istunto päättyi.");
+      }
+    }, 60000);
   }
 
   init();
