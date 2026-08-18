@@ -1,0 +1,10 @@
+{
+  "name": "Työaikaseuranta",
+  "short_name": "Työaika",
+  "start_url": "./?v=21",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#16070b",
+  "theme_color": "#250c12",
+  "lang": "fi"
+}
