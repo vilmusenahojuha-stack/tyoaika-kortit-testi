@@ -172,6 +172,13 @@ function getSelectedPlate(){ return normalizePlate($("plateSelect")?.value || ""
     return Math.min(max, Math.max(min, Math.round(x)));
   }
 
+  function dateTimeToTs(dateStr, hhmm) {
+    const parts = String(dateStr || "").split("-").map(Number);
+    const time = String(hhmm || "00:00").split(":").map(Number);
+    if (parts.length !== 3 || parts.some(n => !Number.isFinite(n))) return NaN;
+    return new Date(parts[0], parts[1] - 1, parts[2], time[0] || 0, time[1] || 0, 0, 0).getTime();
+  }
+
   function parseTimeToTsSameDay(baseDateTs, hhmm) {
     const d = new Date(baseDateTs);
     const [hh, mm] = (hhmm || "00:00").split(":").map(Number);
@@ -972,7 +979,7 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
 
     $("sumUser").value = pendingSummary.user;
     $("sumStartDate").value = toLocalDateStr(pendingSummary.startTs);
-
+    $("sumEndDate").value = toLocalDateStr(pendingSummary.endTs);
     $("sumStartTime").value = toLocalTimeStr(pendingSummary.startTs);
     $("sumEndTime").value = toLocalTimeStr(pendingSummary.endTs);
 
@@ -989,13 +996,13 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
 
     const startTime = ($("sumStartTime").value || "00:00");
     const endTime = ($("sumEndTime").value || "00:00");
-    const base = new Date(pendingSummary.startTs);
-    base.setHours(0,0,0,0);
-    const baseDayTs = base.getTime();
-
-    let startTs = parseTimeToTsSameDay(baseDayTs, startTime);
-    let endTs = parseTimeToTsSameDay(baseDayTs, endTime);
-    endTs = ensureEndAfterStart(startTs, endTs);
+    const startTs = dateTimeToTs($("sumStartDate").value, startTime);
+    const endTs = dateTimeToTs($("sumEndDate").value, endTime);
+    if (!Number.isFinite(startTs) || !Number.isFinite(endTs) || endTs <= startTs) {
+      $("sumSub").textContent = "Loppuajan täytyy olla alkamisajan jälkeen.";
+      return;
+    }
+    $("sumSub").textContent = pendingSummary.mode === "stop" ? "Tarkista ja hyväksy" : "Manuaalinen päivä – tarkista ja hyväksy";
 
     const breakTotalMin = clampInt($("sumBreakTotal").value, 0, 24*60);
 
@@ -1029,13 +1036,14 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
     const breakTotalMin = clampInt($("sumBreakTotal").value, 0, 24*60);
     const perDiem = clampInt($("sumPerDiem").value, 0, 2);
 
-    const base = new Date(pendingSummary.startTs);
-    base.setHours(0,0,0,0);
-    const baseDayTs = base.getTime();
-
-    let startTs = parseTimeToTsSameDay(baseDayTs, startTime);
-    let endTs = parseTimeToTsSameDay(baseDayTs, endTime);
-    endTs = ensureEndAfterStart(startTs, endTs);
+    const startTs = dateTimeToTs($("sumStartDate").value, startTime);
+    const endTs = dateTimeToTs($("sumEndDate").value, endTime);
+    if (!Number.isFinite(startTs) || !Number.isFinite(endTs) || endTs <= startTs) {
+      return toast("Tarkista alkamis- ja loppumispäivä sekä kellonajat.");
+    }
+    if (endTs - startTs > 7 * 24 * 60 * 60 * 1000) {
+      return toast("Yksi työjakso voi olla enintään 7 vuorokautta.");
+    }
 
     const rawSeg = splitPIY(startTs, endTs);
     const deductMin = computeDeduct(breakTotalMin);
@@ -1275,7 +1283,7 @@ $("btnAddPlate")?.addEventListener("click", () => {
     $("sumClose")?.addEventListener("click", closeSummary);
     $("sumCancel")?.addEventListener("click", closeSummary);
     $("sumApprove")?.addEventListener("click", approveSummary);
-    ["sumStartTime","sumEndTime","sumBreakTotal","sumPerDiem"].forEach(id => {
+    ["sumStartDate","sumEndDate","sumStartTime","sumEndTime","sumBreakTotal","sumPerDiem"].forEach(id => {
       $(id)?.addEventListener("input", recalcSummaryPanel);
       $(id)?.addEventListener("change", recalcSummaryPanel);
     });
