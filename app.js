@@ -321,11 +321,22 @@ async function sheetsPost(payload) {
   const url = (HARD_SHEETS_URL || (cfg?.sheetsUrl || "")).trim();
   if (!url) throw new Error("Sheets URL puuttuu (cfg.sheetsUrl).");
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({ ...payload, workToken: session?.cardToken || "" }),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  let res;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ ...payload, workToken: session?.cardToken || "" }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error && error.name === "AbortError") throw new Error("Sheets-yhteys aikakatkaistiin 15 sekunnin jälkeen.");
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 
   const txt = await res.text();
   let data = null;
@@ -1401,7 +1412,7 @@ $("btnAddPlate")?.addEventListener("click", () => {
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js?v=26").catch(error => console.error("Offline-tuki ei käynnistynyt", error));
+      navigator.serviceWorker.register("./sw.js?v=27").catch(error => console.error("Offline-tuki ei käynnistynyt", error));
     });
   }
 
