@@ -137,7 +137,8 @@ input::placeholder{ color:var(--muted2); }
 .btn-yellow{ background: linear-gradient(180deg,#ffe29a,#ffc857); color:#3a2a00; border-color:#ffc857; }
 .btn-red{ background: linear-gradient(180deg,#ff7a7a,#ff4d4d); border-color:#ff4d4d; }
 
-.btnbar{ display:flex; gap:10px; }
+.btnbar{ display:flex; flex-wrap:wrap; gap:10px; }
+.btnbar .btn{ flex:1 1 110px; }
 .btnrow{ display:flex; gap:10px; justify-content:flex-end; }
 
 /* User buttons */
