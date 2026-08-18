@@ -39,6 +39,13 @@ function renderPlates(){
   const sel = $("plateSelect");
   if (!sel) return;
 
+  // TEST-rekisterit eivät saa jäädä selaimen vanhoista asetuksista.
+  cfg.plates = [...new Set((cfg.plates || []).map(normalizePlate).filter(p => p && !/^TEST(?:-|$)/.test(p)))];
+  if (!cfg.plates.includes("ISS-440")) cfg.plates.push("ISS-440");
+  if (!cfg.plates.includes("GPG-830")) cfg.plates.push("GPG-830");
+  cfg.plates.sort();
+  Sset(STORAGE.cfg, cfg);
+
   const cur = sel.value;
   sel.innerHTML = `<option value="">Valitse rekisteri…</option>`;
 
@@ -92,9 +99,9 @@ function renderPlates(){
   // ---------- STATE ----------
   let cfg = Sget(STORAGE.cfg, DEFAULT_CFG);
   // Päivitä testiversion rekisterit kerran; myöhemmin lisätyt rekisterit säilyvät.
-  if (cfg.platesVersion !== 2) {
+  if (cfg.platesVersion !== 3) {
     cfg.plates = ["ISS-440", "GPG-830"];
-    cfg.platesVersion = 2;
+    cfg.platesVersion = 3;
     Sset(STORAGE.cfg, cfg);
   }
   let session = Sget(STORAGE.session, { user: "", authed: false, cardToken: "" });
@@ -624,10 +631,10 @@ async function refreshHistoryFromSheets() {
       const timeLine = `${e.startDate} ${e.startTime} → ${e.endDate} ${e.endTime}`;
       const plateTxt = e.plate ? `Auto: ${e.plate} | ` : "";
 	const sub = `${plateTxt}
-Työaika: ${minutesToHoursDec(e.totalMin)} h | 
-Päivä: ${minutesToHoursDec(e.dayMin)} h | 
-Ilta: ${minutesToHoursDec(e.eveMin)} h | 
-Yö: ${minutesToHoursDec(e.nightMin)} h | 
+Työaika: ${minutesToHHMM(e.totalMin)} h | 
+Päivä: ${minutesToHHMM(e.dayMin)} h | 
+Ilta: ${minutesToHHMM(e.eveMin)} h | 
+Yö: ${minutesToHHMM(e.nightMin)} h | 
 Tauko: ${e.breakTotalMin} min (vähennys ${e.breakDeductMin} min) | 
 Päiväraha: ${perDiemText(e.perDiem)}`;
 
@@ -636,7 +643,7 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
       div.innerHTML = `
         <div class="status ${status}" title="${e.sent === true ? "Lähetetty" : (e.sentErr || "Ei lähetetty")}">${statusChar}</div>
         <div class="meta">
-          <div class="time"><b>${e.user}</b> — ${minutesToHoursDec(e.totalMin)}</div>
+          <div class="time"><b>${e.user}</b> — ${minutesToHHMM(e.totalMin)}</div>
           <div class="sub">${timeLine}</div>
           <div class="sub">${sub}</div>
         </div>
@@ -671,8 +678,8 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
       deductMin = deduct;
     }
 
-    $("liveToday").textContent = minutesToHoursDec(todayMin);
-    $("liveAll").textContent = minutesToHoursDec(histTotal + todayMin);
+    $("liveToday").textContent = minutesToHHMM(todayMin);
+    $("liveAll").textContent = minutesToHHMM(histTotal + todayMin);
     $("liveBreak").textContent = String(breakMin);
     $("liveDeduct").textContent = String(deductMin);
 
@@ -928,10 +935,10 @@ Päiväraha: ${perDiemText(e.perDiem)}`;
     const totalMin = adjSeg.day + adjSeg.eve + adjSeg.night;
 
     $("sumDeduct").textContent = String(deductMin);
-    $("sumTotal").textContent = minutesToHoursDec(totalMin);
-    $("sumDay").textContent = minutesToHoursDec(adjSeg.day);
-    $("sumEve").textContent = minutesToHoursDec(adjSeg.eve);
-    $("sumNight").textContent = minutesToHoursDec(adjSeg.night);
+    $("sumTotal").textContent = minutesToHHMM(totalMin);
+    $("sumDay").textContent = minutesToHHMM(adjSeg.day);
+    $("sumEve").textContent = minutesToHHMM(adjSeg.eve);
+    $("sumNight").textContent = minutesToHHMM(adjSeg.night);
   }
 
   function closeSummary() {
