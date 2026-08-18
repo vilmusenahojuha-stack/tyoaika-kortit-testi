@@ -12,7 +12,7 @@
   const USERS = ["Juha", "Matti", "Janne", "Tommi"];
   
   // Hardcoded endpoints
-  const HARD_SHEETS_URL = "";
+  const HARD_SHEETS_URL = "https://script.google.com/macros/s/AKfycbyFO7eewNr2L-PRgRktrBwYUHA9ub5JzDG6Vf9SyJEcvUDY1wP8o2IKOkzCqzzH75mN/exec";
   const HARD_FUEL_URL = "https://vilmusenahojuha-stack.github.io/Tankkaus/";
   const HARD_CARDS_URL = "https://vilmusenahojuha-stack.github.io/kortit-perehdytykset/";
   const HARD_CARDS_API_URL = "https://script.google.com/macros/s/AKfycbws1ods-A_0YnJ04cWHU8D5bTdGVg8Z36qA6lsuyEUHYuDlneG_KkOd32ZP8tK1-4Vc/exec";
@@ -1353,7 +1353,7 @@ $("btnAddPlate")?.addEventListener("click", () => {
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js?v=24").catch(error => console.error("Offline-tuki ei käynnistynyt", error));
+      navigator.serviceWorker.register("./sw.js?v=25").catch(error => console.error("Offline-tuki ei käynnistynyt", error));
     });
   }
 
