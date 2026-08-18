@@ -1,3 +1,5 @@
+const CARDS_API_URL_ = "https://script.google.com/macros/s/AKfycbws1ods-A_0YnJ04cWHU8D5bTdGVg8Z36qA6lsuyEUHYuDlneG_KkOd32ZP8tK1-4Vc/exec";
+
 /**
  * Työaikaseuranta Apps Script (DATA-yksi välilehti)
  * Tukee: ping, append, list (user)
@@ -7,14 +9,14 @@ function doPost(e) {
   try {
     const body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
 
-    // ---------- PING ----------
+    // Pingi ei lue eikä kirjoita tietoja.
     if (body.action === "ping") return ok_({ ok: true });
 
-    // Resolve user / sheet name
-    const user = String(body.user || "").trim();
+    const authenticatedUser = verifyWorkTokenWithCards_(body.workToken);
+    const requestedUser = String(body.user || "").trim();
     const firstRowUser = (body.rows && body.rows[0] && body.rows[0].user) ? String(body.rows[0].user).trim() : "";
-    const sheetName = (user || firstRowUser || "").trim();
-    if (!sheetName) return ok_({ ok: false, error: "Käyttäjä puuttuu (user)" });
+    const sheetName = (requestedUser || firstRowUser || authenticatedUser).trim();
+    if (sheetName !== authenticatedUser) throw new Error("Istunto ei vastaa käyttäjää.");
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName(sheetName) || ss.insertSheet(sheetName);
@@ -35,14 +37,38 @@ function doPost(e) {
       "totalH",
       "perDiem",
       "approved",
-      "timestamp"
+      "timestamp",
+      "id"
     ];
 
     ensureHeadersAndMaybeUpgrade_(sheet, HEADERS);
 
     // ---------- APPEND ----------
     if (body.action === "append" && Array.isArray(body.rows)) {
-      const rows = body.rows.map(r => {
+      if (!body.rows.length) return ok_({ ok: true, added: 0 });
+      body.rows.forEach(r => {
+        if (String(r.user || authenticatedUser).trim() !== authenticatedUser) throw new Error("Rivin käyttäjä ei vastaa istuntoa.");
+        validateWorkRow_(r);
+      });
+
+      const lock = LockService.getScriptLock();
+      lock.waitLock(15000);
+      try {
+        const idColumn = HEADERS.indexOf("id") + 1;
+        const existingIds = new Set(
+          sheet.getLastRow() < 2 ? [] :
+          sheet.getRange(2, idColumn, sheet.getLastRow() - 1, 1).getValues().flat().map(String).filter(Boolean)
+        );
+        const inputIds = new Set();
+        const newRows = body.rows.filter(r => {
+          const id = String(r.id || "").trim();
+          if (!id) throw new Error("Rivin yksilöllinen tunnus puuttuu.");
+          if (existingIds.has(id) || inputIds.has(id)) return false;
+          inputIds.add(id);
+          return true;
+        });
+
+        const rows = newRows.map(r => {
         const dayH   = num_(r.dayH,   num_(r.dayMin,   0) / 60);
         const eveH   = num_(r.eveH,   num_(r.eveMin,   0) / 60);
         const nightH = num_(r.nightH, num_(r.nightMin, 0) / 60);
@@ -63,13 +89,19 @@ function doPost(e) {
           totalH,
           num_(r.perDiem, 0),
           r.approved === true,
-          r.timestamp || new Date().toISOString()
+          r.timestamp || new Date().toISOString(),
+          String(r.id || "").trim()
         ];
       });
 
-      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, HEADERS.length).setValues(rows);
-      formatHours_(sheet);
-      return ok_({ ok: true });
+        if (rows.length) {
+          sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, HEADERS.length).setValues(rows);
+          formatHours_(sheet);
+        }
+        return ok_({ ok: true, added: rows.length, duplicates: body.rows.length - rows.length });
+      } finally {
+        try { lock.releaseLock(); } catch (_) {}
+      }
     }
 
     // ---------- LIST ----------
@@ -110,7 +142,8 @@ function doPost(e) {
           totalMin: Math.round(totalH * 60),
           perDiem: getNum_(row, idx, "perDiem"),
           approved: getBool_(row, idx, "approved"),
-          timestamp: getStr_(row, idx, "timestamp")
+          timestamp: getStr_(row, idx, "timestamp"),
+          id: getStr_(row, idx, "id")
         });
       }
 
@@ -122,6 +155,36 @@ function doPost(e) {
   } catch (err) {
     return ok_({ ok: false, error: String(err) });
   }
+}
+
+function verifyWorkTokenWithCards_(token) {
+  const value = String(token || "").trim();
+  if (!value) throw new Error("Työaikaistunto puuttuu.");
+  const response = UrlFetchApp.fetch(CARDS_API_URL_, {
+    method: "post",
+    contentType: "text/plain; charset=utf-8",
+    payload: JSON.stringify({ action: "workStatus", token: value }),
+    muteHttpExceptions: true
+  });
+  let data;
+  try { data = JSON.parse(response.getContentText()); }
+  catch (_) { throw new Error("Istunnon tarkistus epäonnistui."); }
+  if (response.getResponseCode() < 200 || response.getResponseCode() >= 300 || !data || data.ok !== true || !data.user) {
+    throw new Error((data && data.error) ? String(data.error) : "Työaikaistunto ei kelpaa.");
+  }
+  return String(data.user).trim();
+}
+
+function validateWorkRow_(r) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(r.startDate || ""))) throw new Error("Aloituspäivä ei kelpaa.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(r.endDate || ""))) throw new Error("Loppupäivä ei kelpaa.");
+  if (!/^\d{2}:\d{2}$/.test(String(r.startTime || ""))) throw new Error("Aloitusaika ei kelpaa.");
+  if (!/^\d{2}:\d{2}$/.test(String(r.endTime || ""))) throw new Error("Lopetusaika ei kelpaa.");
+  const totalH = num_(r.totalH, num_(r.totalMin, 0) / 60);
+  if (totalH < 0 || totalH > 168) throw new Error("Työajan määrä ei kelpaa.");
+  const perDiem = num_(r.perDiem, 0);
+  if ([0, 1, 2].indexOf(perDiem) < 0) throw new Error("Päiväraha ei kelpaa.");
+  if (String(r.plate || "").length > 20) throw new Error("Rekisterinumero ei kelpaa.");
 }
 
 function ensureHeadersAndMaybeUpgrade_(sheet, HEADERS){
@@ -138,6 +201,15 @@ function ensureHeadersAndMaybeUpgrade_(sheet, HEADERS){
   // If already matches (at least starts with our headers), do nothing
   const startsOk = HEADERS.every((h, i) => (hdrStr[i] || "") === h);
   if (startsOk) { formatHours_(sheet); return; }
+
+  // Nykyinen desimaalimuoto ilman id-saraketta: lisää id viimeiseksi.
+  const headersWithoutId = HEADERS.slice(0, -1);
+  const matchesWithoutId = headersWithoutId.every((h, i) => (hdrStr[i] || "") === h);
+  if (matchesWithoutId) {
+    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+    formatHours_(sheet);
+    return;
+  }
 
   // Upgrade path: old minute headers with same structure (user,plate,...,dayMin,eveMin,nightMin,totalMin,...)
   const oldMin = [
